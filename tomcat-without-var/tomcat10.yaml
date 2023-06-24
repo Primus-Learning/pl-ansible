@@ -1,0 +1,118 @@
+---
+- name: download tomcat
+  hosts: app
+  become: true
+  become_method: sudo
+  remote_user: ansible
+
+  tasks:
+  - name: Update and upgrade apt packages
+    apt:
+      upgrade: yes
+      update_cache: yes
+      cache_valid_time: 86400 #One day
+
+  - name: install JDK 11
+    apt:
+      name: openjdk-11-jdk
+      state: present
+
+  - name: add tomcat group
+    group:
+      name: tomcat
+
+  - name: add tomcat user
+    user:
+      name: tomcat
+      group: tomcat
+      home: /user/share/tomcat
+      createhome: no
+
+  - name: create /opt/tomcat directory
+    file:
+      path: /opt/tomcat
+      state: directory
+      mode: 0755
+
+  - name: download & unarchive
+    unarchive:
+      src:  http://apache.cs.utah.edu/tomcat/tomcat-9/v9.0.76/bin/apache-tomcat-9.0.76.tar.gz
+      dest: /opt/tomcat
+      remote_src: yes
+      extra_opts: [--strip-components=1]
+
+  - name: Change ownership
+    file:
+      path: /opt/tomcat
+      owner: tomcat
+      group: tomcat
+      mode: "u+rwx,g+rx,o=rx"
+      recurse: yes
+      state: directory
+
+  - name: Copy Tomcat service from local to remote
+    copy:
+       src: tomcat.service
+       dest: /etc/systemd/system/
+       mode: 0755
+
+  - name: Start and enable Tomcat service
+    systemd:
+      name: tomcat
+      state: started
+      enabled: true
+      daemon_reload: true
+
+- name: setup tomcat
+  become: true
+  hosts: app
+  tasks:
+    - name: set up manager context
+      copy: 
+        content: |-
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!--
+            Licensed to the Apache Software Foundation (ASF) under one or more
+            contributor license agreements.  See the NOTICE file distributed with
+            this work for additional information regarding copyright ownership.
+            The ASF licenses this file to You under the Apache License, Version 2.0
+            (the "License"); you may not use this file except in compliance with
+            the License.  You may obtain a copy of the License at
+
+                http://www.apache.org/licenses/LICENSE-2.0
+
+            Unless required by applicable law or agreed to in writing, software
+            distributed under the License is distributed on an "AS IS" BASIS,
+            WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+            See the License for the specific language governing permissions and
+            limitations under the License.
+            -->
+            <Context antiResourceLocking="false" privileged="true" >
+            <!--
+            <CookieProcessor className="org.apache.tomcat.util.http.Rfc6265CookieProcessor"
+                            sameSiteCookies="strict" />
+            <Valve className="org.apache.catalina.valves.RemoteAddrValve"
+                  allow="127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1" />
+            -->
+            <Manager sessionAttributeValueClassNameFilter="java\.lang\.(?:Boolean|Integer|Long|Number|String)|org\.apache\.catalina\.filters\.CsrfPreventionFilter\$LruCache(?:\$1)?|java\.util\.(?:Linked)?HashMap"/>
+            </Context>
+        dest: /opt/tomcat/webapps/manager/META-INF/context.xml
+
+    - name: set tomcat manager rule
+      copy: 
+        content: |-
+            <?xml version="1.0" encoding="UTF-8"?>
+            <tomcat-users xmlns="http://tomcat.apache.org/xml"
+                          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                          xsi:schemaLocation="http://tomcat.apache.org/xml tomcat-users.xsd"
+                          version="1.0">
+                <role rolename=" manager-gui"/>
+                <role rolename=" admin-gui"/>
+                <user username="admin" password="admin" roles="manager-gui,admin-gui"/>
+                <user username="aziz" password="aziz" roles="manager-gui,admin-gui"/>
+            </tomcat-users>
+        dest: /opt/tomcat/conf/tomcat-users.xml
+    - name: restart Tomcat service
+      systemd:
+        name: tomcat
+        state: restarted

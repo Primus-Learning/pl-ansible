@@ -1,0 +1,48 @@
+- name: install nginx
+  hosts: web
+  become: true
+
+  tasks: 
+  - name: install nginx on ubuntu
+    apt:
+      name: nginx
+      state: present
+      update_cache: true
+
+  - name: enable nginx
+    service:
+      name: nginx
+      enabled: yes
+      state: started
+  
+  - name: copy html to nginx dir
+    copy:
+      src: /home/ubuntu/playbook/index.html
+      dest: /var/www/html/index.html
+
+- name: install mysql
+  hosts: db
+  become: true
+
+  tasks:
+  - name: install mysql
+    apt: 
+     name: mysql-server
+     state: present
+     update_cache: true
+
+  - name: start mysql server
+    service:
+      name: mysql
+      enabled: true
+      state: started
+
+- name: install jdk 11
+  hosts: app
+  become: true
+
+  tasks: 
+  - name: install jdk 11
+    apt:
+      name: openjdk-11-jdk
+      state: present

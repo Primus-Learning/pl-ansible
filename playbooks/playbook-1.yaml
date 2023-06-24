@@ -1,0 +1,6 @@
+- name: make directory
+  hosts: all
+  tasks:
+  - name: create directory
+    shell:
+      cmd: mkdir playbooks
